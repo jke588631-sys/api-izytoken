@@ -1,0 +1,8 @@
+[Unit]
+Description=new-api relay monitor (memory / restarts / health / upstream timeouts)
+Documentation=see /opt/new-api-migrated/PROGRESS.md 2026-08-05
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/new-api-monitor.sh

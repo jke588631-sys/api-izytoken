@@ -42,3 +42,10 @@ skills-lock.json
 service/relayconvert/chat_responses_live_local_test.go
 service/openaicompat/chat_responses_live_local_test.go
 new-api-linux*
+
+# 部署配置中的真实密钥（只允许提交 .env.example）
+deploy/**/.env
+deploy/**/*.conf
+!deploy/**/*.conf.example
+deploy/**/*.key
+deploy/**/*.pem

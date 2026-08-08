@@ -1,0 +1,7 @@
+# /etc/new-api-monitor.conf —— 权限 600，不得提交
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+WECOM_WEBHOOK=
+FEISHU_WEBHOOK=
+# WARN_ANON_GB=8
+# CRIT_ANON_GB=13

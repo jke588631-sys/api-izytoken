@@ -1,0 +1,103 @@
+{
+	auto_https off
+	servers {
+		protocols h1 h2 h2c h3
+	}
+}
+
+http://na.izytoken.com {
+	encode zstd gzip
+
+	request_body {
+		max_size 0
+	}
+
+	# 自定义 logo
+	handle /logo.png {
+		root * /srv/site-assets
+		file_server
+		header Cache-Control "public, max-age=60"
+	}
+
+	# 自定义 favicon
+	handle /favicon.ico {
+		root * /srv/site-assets
+		file_server
+		header Cache-Control "public, max-age=60"
+	}
+
+	# 静态教程页
+	handle_path /tutorial/* {
+		root * /srv/tutorial
+		file_server
+		header Cache-Control "public, max-age=3600"
+	}
+	handle /tutorial {
+		redir /tutorial/ 301
+	}
+
+	# 其他全部反代
+# Copyright (c) 2026 izytoken - MIT
+# Snippet: insert INSIDE the na.izytoken.com { ... } site block in production Caddyfile,
+# BEFORE the catch-all handle { reverse_proxy whatsapp-overlay:3100 ... } (T23 deploy script).
+# Requires: izytoken-caddy:custom image (built by deploy-creator.sh step [0/7]).
+
+	# === Creator service (v3: matches staging routing, do NOT strip prefix) ===
+	# Do NOT strip the /creator prefix - Next.js basePath is /creator
+	# trailingSlash is false in Next.js; rewrite /creator/ -> /creator before proxying
+	handle /creator/ {
+		rewrite * /creator
+		reverse_proxy creator:3200
+	}
+	handle /creator {
+		reverse_proxy creator:3200
+	}
+	handle /creator/* {
+		reverse_proxy creator:3200
+	}
+	handle /assets-injector.js {
+		root * /srv/injector
+		file_server
+		header Cache-Control "no-cache, no-store, must-revalidate"
+		header Content-Type "application/javascript"
+	}
+	# === End Creator service ===
+
+	handle {
+		reverse_proxy whatsapp-overlay:3100 {
+			flush_interval -1
+
+			transport http {
+				response_header_timeout 900s
+				dial_timeout 10s
+				read_buffer 512kb
+				write_buffer 512kb
+				max_conns_per_host 0
+				keepalive 30s
+				keepalive_idle_conns 64
+			}
+
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up Connection ''
+			header_up Accept-Encoding ''
+		}
+		replace stream {
+			"</body>" `<script defer src="/assets-injector.js"></script></body>`
+		}
+	}
+
+	header {
+		-Server
+		X-Accel-Buffering no
+		X-Content-Type-Options nosniff
+	}
+}
+
+http://studio.izytoken.com {
+	encode zstd gzip
+	request_body {
+		max_size 0
+	}
+	reverse_proxy izytoken-studio:3000
+}

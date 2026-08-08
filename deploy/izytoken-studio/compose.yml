@@ -1,0 +1,39 @@
+services:
+  studio:
+    build:
+      context: ./runtime
+      dockerfile: Dockerfile
+    image: izytoken-studio:local
+    container_name: izytoken-studio
+    mem_limit: 1g
+    memswap_limit: 1g
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    expose:
+      - '3000'
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+    environment:
+      SQL_DSN: ""
+      MEDIA_STORE_TYPE: local
+      MEDIA_LOCAL_DIR: /data/media
+      MEDIA_PUBLIC_BASE: https://studio.izytoken.com
+      FRONTEND_BASE_URL: https://studio.izytoken.com
+      SESSION_SECRET: "${SESSION_SECRET}"
+      CRYPTO_SECRET: "${CRYPTO_SECRET}"
+      TZ: Asia/Shanghai
+      STREAMING_TIMEOUT: '300'
+    networks:
+      - na-izytoken-net
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O - http://localhost:3000/api/status | grep -q success || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  na-izytoken-net:
+    external: true
+    name: na-izytoken_na-izytoken-net

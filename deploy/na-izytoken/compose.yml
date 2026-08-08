@@ -1,0 +1,180 @@
+services:
+  new-api:
+    build:
+      context: ./runtime
+      dockerfile: Dockerfile
+    image: na-izytoken-new-api:local
+    container_name: na-izytoken-new-api
+    mem_limit: 4g
+    memswap_limit: 4g
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    expose:
+    - '3000'
+    volumes:
+    - ./data:/data
+    - ./logs:/app/logs
+    environment:
+      SQL_DSN: postgresql://root:${POSTGRES_PASSWORD}@postgres:5432/new-api
+      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET}
+      CRYPTO_SECRET: ${CRYPTO_SECRET}
+      FRONTEND_BASE_URL: https://na.izytoken.com
+      TZ: Asia/Shanghai
+      ERROR_LOG_ENABLED: 'true'
+      BATCH_UPDATE_ENABLED: 'true'
+      NODE_NAME: na-izytoken-new-api-1
+      STREAMING_TIMEOUT: '300'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+    - na-izytoken-net
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q -O - http://localhost:3000/api/status | grep -o '"success":\s*true'
+        || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    ulimits:
+      nofile:
+        soft: 165535
+        hard: 165535
+  postgres:
+    image: postgres:15-alpine
+    container_name: na-izytoken-postgres
+    mem_limit: 2g
+    memswap_limit: 2g
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: new-api
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    networks:
+    - na-izytoken-net
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U root -d new-api
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ulimits:
+      nofile:
+        soft: 165535
+        hard: 165535
+  redis:
+    image: redis:7-alpine
+    container_name: na-izytoken-redis
+    restart: unless-stopped
+    command:
+    - redis-server
+    - --requirepass
+    - ${REDIS_PASSWORD}
+    volumes:
+    - redis_data:/data
+    networks:
+    - na-izytoken-net
+    ulimits:
+      nofile:
+        soft: 165535
+        hard: 165535
+  caddy:
+    image: izytoken-caddy:custom
+    container_name: na-izytoken-caddy
+    mem_limit: 512m
+    memswap_limit: 512m
+    restart: unless-stopped
+    ports:
+    - 127.0.0.1:8080:80
+    volumes:
+    - ./injector:/srv/injector:ro
+    - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    - ./caddy_data:/data
+    - ./caddy_config:/config
+    - ./tutorial:/srv/tutorial:ro
+    - ./site-assets:/srv/site-assets:ro
+    depends_on:
+    - whatsapp-overlay
+    networks:
+    - na-izytoken-net
+    ulimits:
+      nofile:
+        soft: 165535
+        hard: 165535
+  whatsapp-overlay:
+    build:
+      context: ./whatsapp-overlay
+      dockerfile: Dockerfile.release
+    image: na-izytoken-whatsapp-overlay:local
+    container_name: na-izytoken-whatsapp-overlay
+    mem_limit: 1g
+    memswap_limit: 1g
+    restart: unless-stopped
+    volumes:
+    - ./data:/data
+    environment:
+      OVERLAY_LISTEN_ADDR: :3100
+      OVERLAY_UPSTREAM_BASE_URL: http://new-api:3000
+      OVERLAY_DATA_FILE: /data/support-sessions.json
+      OVERLAY_BUSINESS_NAME: Izytoken Support
+      OVERLAY_WIDGET_TITLE: Live Support
+      OVERLAY_WIDGET_SUBTITLE: Chat with us without leaving the site
+      OVERLAY_WELCOME_MESSAGE: Hi there. Your message will be sent directly to our
+        support team, and their replies will appear in this chat window.
+      OVERLAY_INPUT_PLACEHOLDER: Type your message...
+      OVERLAY_ACCENT_COLOR: '#25D366'
+      OVERLAY_MOCK_REPLY_ENABLED: 'false'
+      WHATSAPP_API_BASE: https://graph.facebook.com/v22.0
+      WHATSAPP_PHONE_NUMBER_ID: ''
+      WHATSAPP_ACCESS_TOKEN: ''
+      WHATSAPP_RECIPIENT: ''
+      WHATSAPP_WA_ME_URL: ''
+      TELEGRAM_API_BASE: https://api.telegram.org
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      TELEGRAM_POLL_EVERY: 3s
+    depends_on:
+    - new-api
+    networks:
+    - na-izytoken-net
+    ulimits:
+      nofile:
+        soft: 165535
+        hard: 165535
+# Copyright (c) 2026 izytoken — MIT
+# Snippet: append under `services:` in production compose.yml (T23 deploy script).
+  creator:
+    image: izytoken-creator:current
+    container_name: izytoken-creator
+    mem_limit: 1g
+    memswap_limit: 1g
+    restart: unless-stopped
+    networks:
+      - na-izytoken-net
+    environment:
+      NEWAPI_BASE: http://new-api:3000
+      NODE_ENV: production
+      PORT: "3200"
+      HOSTNAME: 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3200/creator/api/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    expose:
+      - "3200"
+volumes:
+  postgres_data: null
+  redis_data: null
+networks:
+  na-izytoken-net:
+    driver: bridge

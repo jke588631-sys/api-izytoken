@@ -1,0 +1,11 @@
+[Unit]
+Description=Run new-api monitor every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=new-api-monitor.service
+
+[Install]
+WantedBy=timers.target

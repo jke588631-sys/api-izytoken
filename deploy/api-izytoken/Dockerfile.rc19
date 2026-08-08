@@ -1,0 +1,5 @@
+FROM calciumion/new-api:latest
+COPY new-api-linux-rc19 /new-api
+EXPOSE 3000
+WORKDIR /data
+ENTRYPOINT ["/new-api"]

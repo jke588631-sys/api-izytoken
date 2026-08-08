@@ -1,0 +1,102 @@
+{
+	servers {
+		protocols h1 h2 h2c h3
+	}
+}
+
+api.izytoken.com, izytoken.com {
+
+	# 覆盖修改过的前端资源
+	handle /assets/index-4Flal_qk.js {
+		root * /override
+		file_server
+		header Content-Type "application/javascript; charset=utf-8"
+		header Cache-Control "no-cache, must-revalidate"
+	}
+
+	# API 流式路径：不压缩、低延迟
+	@streaming path /v1/chat/completions /v1/completions /v1/responses
+	handle @streaming {
+		reverse_proxy new-api-migrated-pg:3000 {
+			flush_interval -1
+
+			transport http {
+				response_header_timeout 900s
+				dial_timeout 10s
+				read_buffer 64kb
+				write_buffer 64kb
+				max_conns_per_host 0
+				keepalive 30s
+				keepalive_idle_conns 64
+			}
+
+			header_up X-Real-IP {header.CF-Connecting-IP}
+			header_up X-Forwarded-For {header.CF-Connecting-IP}
+			header_up Connection ""
+			header_up Accept-Encoding ""
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy new-api-migrated-pg:3000 {
+			flush_interval -1
+			transport http {
+				response_header_timeout 900s
+				dial_timeout 10s
+				read_buffer 64kb
+				write_buffer 64kb
+				max_conns_per_host 0
+				keepalive 30s
+				keepalive_idle_conns 64
+			}
+			header_up X-Real-IP {header.CF-Connecting-IP}
+			header_up X-Forwarded-For {header.CF-Connecting-IP}
+		}
+	}
+
+	request_body {
+		max_size 0
+	}
+
+	header {
+		-Server
+		>Alt-Svc "h3=\":443\"; ma=86400"
+		X-Content-Type-Options nosniff
+	}
+}
+
+# ===== na.izytoken.com / studio.izytoken.com =====
+# 迁移自 167.172.147.152（2026-08-05）。项目独立部署于 /opt/na-izytoken，
+# 独立 compose 项目名 na-izytoken、独立 docker 网络、独立 PostgreSQL。
+# 本块只做 TLS 终止 + 转发，不涉及任何数据。内层 Caddy 监听 127.0.0.1:8080。
+na.izytoken.com, studio.izytoken.com {
+	encode zstd gzip
+
+	request_body {
+		max_size 0
+	}
+
+	reverse_proxy na-izytoken-caddy:80 {
+		flush_interval -1
+
+		transport http {
+			response_header_timeout 900s
+			dial_timeout 10s
+			read_buffer 512kb
+			write_buffer 512kb
+			max_conns_per_host 0
+			keepalive 30s
+			keepalive_idle_conns 64
+		}
+
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+	}
+}
